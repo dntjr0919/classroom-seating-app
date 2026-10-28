@@ -1,13 +1,14 @@
 """
 교실 자리 배치 프로그램 - 자리 배치 알고리즘 서비스 (services/seating_service.py)
 5가지 배치 방식(기본 무작위, 남녀 이성 짝꿍, 동성 짝꿍, 번호순 자동 배치, 앞뒤 구역 교차 배치),
-고정석(Pin/Lock) 유지/무시 옵션, 수동 자리 맞바꾸기(Swap) 및 유효성 검증을 담당합니다.
+고정석(Pin/Lock) 유지/무시 옵션, 수동 자리 맞바꾸기(Swap), 유효성 검증 및
+히든 관리자 기능(1회성 강제 배치 프리셋 매핑, 1칸 이내 근거리 배치 제외 학생 쌍 제약)을 담당합니다.
 """
 
 from __future__ import annotations
 
 import random
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 from models import (
     ClassroomGrid,
@@ -17,6 +18,9 @@ from models import (
     Seat,
     Student,
 )
+from .secret_config_service import SecretConfigService, parse_coord_key
+
+MAX_FORBIDDEN_RETRIES = 1000
 
 
 class SeatingValidationError(Exception):
@@ -27,6 +31,41 @@ class SeatingService:
     """
     교실 자리 배치 비즈니스 로직 및 제약 조건 검증 서비스 클래스.
     """
+
+    @staticmethod
+    def is_chebyshev_adjacent(coord_a: Tuple[int, int], coord_b: Tuple[int, int]) -> bool:
+        """
+        두 좌석 좌표가 상하/좌우/대각선 8방향 기준 1칸 이내(체비쇼프 거리 <= 1)인지 판정합니다.
+        공식: max(abs(r1 - r2), abs(c1 - c2)) <= 1
+        """
+        return max(abs(coord_a[0] - coord_b[0]), abs(coord_a[1] - coord_b[1])) <= 1
+
+    @classmethod
+    def get_forbidden_violations(
+        cls,
+        grid: ClassroomGrid,
+        forbidden_pairs: List[Tuple[str, str]],
+    ) -> List[Tuple[str, str]]:
+        """
+        현재 격자 배치 상태에서 forbidden_pairs에 등록된 두 학생이
+        체비쇼프 거리 1 이내에 인접 배치된 위반 쌍 목록을 반환합니다.
+        """
+        if not forbidden_pairs:
+            return []
+
+        coord_by_id: Dict[str, Tuple[int, int]] = {
+            desk.student.student_id: desk.coordinate
+            for desk in grid.active_desks()
+            if desk.student is not None
+        }
+
+        violations: List[Tuple[str, str]] = []
+        for id_a, id_b in forbidden_pairs:
+            ca = coord_by_id.get(id_a)
+            cb = coord_by_id.get(id_b)
+            if ca is not None and cb is not None and cls.is_chebyshev_adjacent(ca, cb):
+                violations.append((id_a, id_b))
+        return violations
 
     @staticmethod
     def validate_arrangement(
@@ -99,6 +138,35 @@ class SeatingService:
                 )
 
     @classmethod
+    def assign_seats(
+        cls,
+        grid: ClassroomGrid,
+        roster: List[Student],
+        mode: PlacementMode = PlacementMode.RANDOM,
+        respect_locks: bool = True,
+        order_direction: OrderDirection = OrderDirection.ROW_FIRST,
+        seed: Optional[int] = None,
+        force_preset_map: Optional[Dict[Union[str, Tuple[int, int]], str]] = None,
+        forbidden_pairs: Optional[List[Tuple[str, str]]] = None,
+        secret_service: Optional[SecretConfigService] = None,
+    ) -> Tuple[str, Optional[str]]:
+        """
+        자리 배치를 실행합니다 (force_preset_map 및 forbidden_pairs 제약 조건 연동).
+        execute_placement와 동일한 인터페이스를 제공합니다.
+        """
+        return cls.execute_placement(
+            grid=grid,
+            roster=roster,
+            mode=mode,
+            respect_locks=respect_locks,
+            order_direction=order_direction,
+            seed=seed,
+            force_preset_map=force_preset_map,
+            forbidden_pairs=forbidden_pairs,
+            secret_service=secret_service,
+        )
+
+    @classmethod
     def execute_placement(
         cls,
         grid: ClassroomGrid,
@@ -107,14 +175,28 @@ class SeatingService:
         respect_locks: bool = True,
         order_direction: OrderDirection = OrderDirection.ROW_FIRST,
         seed: Optional[int] = None,
+        force_preset_map: Optional[Dict[Union[str, Tuple[int, int]], str]] = None,
+        forbidden_pairs: Optional[List[Tuple[str, str]]] = None,
+        secret_service: Optional[SecretConfigService] = None,
     ) -> Tuple[str, Optional[str]]:
         """
-        선택된 배치 방식(5종)과 고정석 유지 여부에 따라 자리를 배치합니다.
+        선택된 배치 방식(5종), 고정석 유지 여부, 그리고 히든 관리자 설정
+        (force_preset_map, forbidden_pairs)에 따라 자리를 배치합니다.
         - respect_locks=True: 고정된 좌석과 해당 학생을 유지하고 나머지 좌석만 배치
         - respect_locks=False: 고정 표시(is_locked) 자체는 삭제하지 않고 유지하되,
                                이번 배치에서 고정 제약을 무시하고 전체 학생을 재배치
+        - force_preset_map: 1회성 강제 배치 활성 시 사전 매핑된 좌석에 학생을 우선 배정 (고정 핀 UI 미표시)
+        - forbidden_pairs: 상하/좌우/대각선 1칸 이내(체비쇼프 거리 <= 1) 인접 금지 학생 쌍 검증
+                           (최대 1,000회 재시도 후 미해결 시 1:1 Local Swap 수행)
         반환값: (상태 표시줄 요약 메시지, 조건 부분 불충족 안내 메시지 또는 None)
         """
+        # 0. SecretConfigService가 전달된 경우 설정 자동 로드
+        if secret_service is not None:
+            if force_preset_map is None and secret_service.is_force_next_assignment():
+                force_preset_map = secret_service.get_preset_map()
+            if forbidden_pairs is None:
+                forbidden_pairs = secret_service.get_forbidden_pairs()
+
         # 1. 사전 유효성 검증 (실패 시 기존 배치 상태 100% 보존)
         cls.validate_arrangement(grid, roster, respect_locks=respect_locks)
 
@@ -131,7 +213,7 @@ class SeatingService:
             )
 
         rng = random.Random(seed)
-        roster_by_id = {s.student_id: s for s in roster}
+        roster_by_id: Dict[str, Student] = {s.student_id: s for s in roster}
 
         # 2. 고정석 유지/무시 옵션에 따른 대상 좌석 및 미배정 학생 분리
         locked_student_ids: Set[str] = set()
@@ -141,7 +223,10 @@ class SeatingService:
             for desk in grid.active_desks():
                 if desk.is_locked:
                     if desk.student is not None:
-                        if desk.student.student_id in roster_by_id and desk.student.student_id not in locked_student_ids:
+                        if (
+                            desk.student.student_id in roster_by_id
+                            and desk.student.student_id not in locked_student_ids
+                        ):
                             desk.student = roster_by_id[desk.student.student_id]
                             locked_student_ids.add(desk.student.student_id)
                         else:
@@ -161,41 +246,133 @@ class SeatingService:
                 desk.student = None
                 editable_desks.append(desk)
 
+        # 3. 히든 1회성 강제 배치 프리셋(force_preset_map) 우선 적용
+        #    (화면상 고정 핀(is_locked)은 변경하지 않아 학생들에게 노출되지 않도록 처리)
+        preset_student_ids: Set[str] = set()
+        preset_coords: Set[Tuple[int, int]] = set()
+
+        if force_preset_map:
+            editable_by_coord: Dict[Tuple[int, int], Seat] = {
+                d.coordinate: d for d in editable_desks
+            }
+            for raw_key, raw_student_id in force_preset_map.items():
+                coord = parse_coord_key(raw_key)
+                st_id = str(raw_student_id).strip() if raw_student_id is not None else ""
+                if coord is None or not st_id:
+                    continue
+                # 명단에 없는 학생이거나 이미 고정석/프리셋에 배정된 학생이면 안전하게 건너뜀
+                if st_id not in roster_by_id:
+                    continue
+                if st_id in locked_student_ids or st_id in preset_student_ids:
+                    continue
+                # 해당 좌표가 배정 가능한 활성 좌석인지 확인
+                if coord not in editable_by_coord or coord in preset_coords:
+                    continue
+
+                target_seat = editable_by_coord[coord]
+                target_seat.student = roster_by_id[st_id]
+                preset_student_ids.add(st_id)
+                preset_coords.add(coord)
+
+            if preset_coords:
+                editable_desks = [
+                    d for d in editable_desks if d.coordinate not in preset_coords
+                ]
+
         remaining_students: List[Student] = [
-            s for s in roster if s.student_id not in locked_student_ids
+            s
+            for s in roster
+            if s.student_id not in locked_student_ids
+            and s.student_id not in preset_student_ids
         ]
 
-        # 앞줄부터 채울 대상 비고정 좌석 (학생 수와 정확히 동일한 개수)
+        # 앞줄부터 채울 대상 비고정 좌석 (남은 학생 수와 정확히 동일한 개수)
         target_desks: List[Seat] = editable_desks[: len(remaining_students)]
+        unused_editable_desks: List[Seat] = editable_desks[len(remaining_students) :]
+
+        # 유효한 근거리 배치 제외 쌍 필터링 (현재 명단에 존재하는 서로 다른 두 학생만 대상)
+        valid_forbidden_pairs: List[Tuple[str, str]] = []
+        if forbidden_pairs:
+            seen_pair_keys = set()
+            for pair in forbidden_pairs:
+                if isinstance(pair, (tuple, list)) and len(pair) == 2:
+                    id_a, id_b = str(pair[0]).strip(), str(pair[1]).strip()
+                    if (
+                        id_a in roster_by_id
+                        and id_b in roster_by_id
+                        and id_a != id_b
+                    ):
+                        pk = frozenset((id_a, id_b))
+                        if pk not in seen_pair_keys:
+                            seen_pair_keys.add(pk)
+                            valid_forbidden_pairs.append((id_a, id_b))
+
+        # 4. 배치 실행 및 근거리 제외(forbidden_pairs) 검증 루프 (최대 1,000회 재시도)
+        max_attempts = (
+            MAX_FORBIDDEN_RETRIES
+            if (valid_forbidden_pairs and mode != PlacementMode.NUMBER_ORDER)
+            else 1
+        )
 
         notice: Optional[str] = None
+        has_fixed_seats = respect_locks or bool(preset_coords)
 
-        if mode == PlacementMode.RANDOM:
-            cls._place_random(target_desks, remaining_students, rng)
-        elif mode == PlacementMode.MIXED_GENDER_PAIR:
-            notice = cls._place_mixed_gender_pairs(
-                grid, target_desks, remaining_students, respect_locks, rng
-            )
-        elif mode == PlacementMode.SAME_GENDER_PAIR:
-            notice = cls._place_same_gender_pairs(
-                grid, target_desks, remaining_students, respect_locks, rng
-            )
-        elif mode == PlacementMode.NUMBER_ORDER:
-            notice = cls._place_number_order(
-                target_desks, remaining_students, order_direction
-            )
-        elif mode == PlacementMode.FRONT_BACK_CROSS:
-            notice = cls._place_front_back_cross(
-                grid,
-                target_desks,
-                remaining_students,
-                prev_coord_by_id,
-                respect_locks,
-                rng,
-            )
+        for attempt in range(max_attempts):
+            if attempt > 0:
+                for d in target_desks:
+                    d.student = None
 
-        # 3. 사후 무결성 검증 (학생 중복 또는 누락 방지)
+            if mode == PlacementMode.RANDOM:
+                cls._place_random(target_desks, remaining_students, rng)
+            elif mode == PlacementMode.MIXED_GENDER_PAIR:
+                notice = cls._place_mixed_gender_pairs(
+                    grid, target_desks, remaining_students, has_fixed_seats, rng
+                )
+            elif mode == PlacementMode.SAME_GENDER_PAIR:
+                notice = cls._place_same_gender_pairs(
+                    grid, target_desks, remaining_students, has_fixed_seats, rng
+                )
+            elif mode == PlacementMode.NUMBER_ORDER:
+                notice = cls._place_number_order(
+                    target_desks, remaining_students, order_direction
+                )
+            elif mode == PlacementMode.FRONT_BACK_CROSS:
+                notice = cls._place_front_back_cross(
+                    grid,
+                    target_desks,
+                    remaining_students,
+                    prev_coord_by_id,
+                    respect_locks,
+                    rng,
+                )
+
+            if not valid_forbidden_pairs:
+                break
+
+            violations = cls.get_forbidden_violations(grid, valid_forbidden_pairs)
+            if not violations:
+                break
+        else:
+            # 최대 재시도(1,000회) 후에도 위반이 남아 있는 경우 1:1 맞바꾸기(Local Swap)로 해결
+            if valid_forbidden_pairs:
+                cls._resolve_forbidden_by_local_swap(
+                    grid=grid,
+                    swappable_desks=target_desks,
+                    unused_desks=unused_editable_desks,
+                    forbidden_pairs=valid_forbidden_pairs,
+                    rng=rng,
+                )
+                if mode == PlacementMode.MIXED_GENDER_PAIR:
+                    notice = cls._summarize_pair_result(grid, is_mixed=True)
+                elif mode == PlacementMode.SAME_GENDER_PAIR:
+                    notice = cls._summarize_pair_result(grid, is_mixed=False)
+
+        # 5. 사후 무결성 검증 (학생 중복 또는 누락 방지)
         cls._verify_post_assignment(grid, roster)
+
+        # 6. 배치가 정상적으로 완료되면 1회성 강제 배치 플래그 즉시 False로 리셋
+        if secret_service is not None:
+            secret_service.consume_force_next_assignment()
 
         lock_desc = "고정석 유지" if respect_locks else "고정 제약 무시"
         status_msg = f"[{mode.display_kr()} · {lock_desc}] 자리 배치가 완료되었습니다."
@@ -203,6 +380,113 @@ class SeatingService:
             status_msg += f" ({notice})"
 
         return status_msg, notice
+
+    @classmethod
+    def _resolve_forbidden_by_local_swap(
+        cls,
+        grid: ClassroomGrid,
+        swappable_desks: List[Seat],
+        unused_desks: List[Seat],
+        forbidden_pairs: List[Tuple[str, str]],
+        rng: random.Random,
+    ) -> None:
+        """
+        재시도 루프 이후에도 남아 있는 근거리 배치 제외(forbidden_pairs) 위반을
+        제약 충돌이 없는 다른 비고정 좌석 학생과의 1:1 맞바꾸기(Local Swap)로 해결합니다.
+        """
+        if not swappable_desks or not forbidden_pairs:
+            return
+
+        swappable_coords = {d.coordinate for d in swappable_desks}
+
+        # 최대 스왑 패스 수행 (위반 개수가 줄어들거나 해소될 때까지 반복)
+        max_passes = max(len(swappable_desks) * 2, 10)
+        for _ in range(max_passes):
+            violations = cls.get_forbidden_violations(grid, forbidden_pairs)
+            if not violations:
+                return
+
+            current_violation_count = len(violations)
+            desk_by_student_id: Dict[str, Seat] = {
+                d.student.student_id: d
+                for d in grid.active_desks()
+                if d.student is not None
+            }
+
+            swapped_in_pass = False
+            for id_a, id_b in violations:
+                desk_a = desk_by_student_id.get(id_a)
+                desk_b = desk_by_student_id.get(id_b)
+
+                candidate_violating_desks: List[Seat] = []
+                if desk_a is not None and desk_a.coordinate in swappable_coords:
+                    candidate_violating_desks.append(desk_a)
+                if desk_b is not None and desk_b.coordinate in swappable_coords:
+                    candidate_violating_desks.append(desk_b)
+
+                rng.shuffle(candidate_violating_desks)
+                other_desks = list(swappable_desks)
+                rng.shuffle(other_desks)
+
+                for v_desk in candidate_violating_desks:
+                    for target_desk in other_desks:
+                        if v_desk.coordinate == target_desk.coordinate:
+                            continue
+
+                        # 1:1 임시 스왑 후 전체 위반 건수 감소 여부 확인
+                        v_desk.student, target_desk.student = (
+                            target_desk.student,
+                            v_desk.student,
+                        )
+                        new_violations = cls.get_forbidden_violations(grid, forbidden_pairs)
+                        if len(new_violations) < current_violation_count:
+                            swapped_in_pass = True
+                            break
+                        # 개선되지 않으면 원복
+                        v_desk.student, target_desk.student = (
+                            target_desk.student,
+                            v_desk.student,
+                        )
+
+                    if swapped_in_pass:
+                        break
+                if swapped_in_pass:
+                    break
+
+            if not swapped_in_pass:
+                break
+
+        # 만약 배정된 좌석들끼리의 교환만으로 해결되지 않고 여유 빈 책상(unused_desks)이 존재한다면
+        # 빈 활성 책상과의 1:1 자리 이동으로 최종 해결 시도
+        violations = cls.get_forbidden_violations(grid, forbidden_pairs)
+        if violations and unused_desks:
+            all_pool = list(swappable_desks) + list(unused_desks)
+            pool_coords = {d.coordinate for d in all_pool}
+            for id_a, id_b in list(violations):
+                current_violations = cls.get_forbidden_violations(grid, forbidden_pairs)
+                if not current_violations:
+                    break
+                cur_count = len(current_violations)
+                desk_by_id = {
+                    d.student.student_id: d
+                    for d in grid.active_desks()
+                    if d.student is not None
+                }
+                for st_id in (id_a, id_b):
+                    v_desk = desk_by_id.get(st_id)
+                    if v_desk is None or v_desk.coordinate not in pool_coords:
+                        continue
+                    moved = False
+                    for empty_desk in unused_desks:
+                        if empty_desk.student is not None:
+                            continue
+                        v_desk.student, empty_desk.student = None, v_desk.student
+                        if len(cls.get_forbidden_violations(grid, forbidden_pairs)) < cur_count:
+                            moved = True
+                            break
+                        v_desk.student, empty_desk.student = empty_desk.student, None
+                    if moved:
+                        break
 
     @staticmethod
     def _place_random(
@@ -227,7 +511,7 @@ class SeatingService:
         """
         남녀 이성 짝꿍 배치:
         - 레이아웃의 통로(AISLE)/비활성(DISABLED)을 넘지 않는 인접 2인 짝꿍 좌석을 활용
-        - 고정석 유지 시 이미 고정된 학생의 성별과 반대 성별을 옆자리에 우선 배정
+        - 고정석/프리셋 유지 시 이미 배정된 학생의 성별과 반대 성별을 옆자리에 우선 배정
         - 빈 짝꿍 좌석에 남학생 1명 + 여학생 1명을 우선 배정하고 나머지는 무작위 배정
         """
         target_coords = {d.coordinate for d in target_desks}
@@ -254,7 +538,7 @@ class SeatingService:
                 if locked_seat.student is not None:
                     half_locked_pairs.append((locked_seat, free_seat))
 
-        # 1) 한쪽이 고정된 짝꿍 좌석에 이성 학생 우선 배정
+        # 1) 한쪽이 고정/사전배정된 짝꿍 좌석에 이성 학생 우선 배정
         rng.shuffle(half_locked_pairs)
         for locked_seat, free_seat in half_locked_pairs:
             assert locked_seat.student is not None
@@ -295,7 +579,7 @@ class SeatingService:
         """
         동성 짝꿍 배치:
         - 레이아웃의 통로(AISLE)/비활성(DISABLED)을 넘지 않는 인접 2인 짝꿍 좌석을 활용
-        - 고정석 유지 시 이미 고정된 학생과 같은 성별 학생을 옆자리에 우선 배정
+        - 고정석/프리셋 유지 시 이미 배정된 학생과 같은 성별 학생을 옆자리에 우선 배정
         - 빈 짝꿍 좌석에 남-남 또는 여-여 짝을 우선 배정하고 나머지는 무작위 배정
         """
         target_coords = {d.coordinate for d in target_desks}
@@ -322,7 +606,7 @@ class SeatingService:
                 if locked_seat.student is not None:
                     half_locked_pairs.append((locked_seat, free_seat))
 
-        # 1) 한쪽이 고정된 짝꿍 좌석에 동성 학생 우선 배정
+        # 1) 한쪽이 고정/사전배정된 짝꿍 좌석에 동성 학생 우선 배정
         rng.shuffle(half_locked_pairs)
         for locked_seat, free_seat in half_locked_pairs:
             assert locked_seat.student is not None

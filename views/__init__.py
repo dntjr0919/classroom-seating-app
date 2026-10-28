@@ -3,6 +3,7 @@ views 패키지 초기화 모듈
 """
 
 from .grid_designer import GridDesignerDialog
+from .hidden_admin_dialog import HiddenAdminDialog, MiniPresetSeatButton
 from .seating_view import DeskCardWidget, SeatingBoardView
 from .shortcut_dialog import (
     ACTION_CLEAR_ASSIGNMENT,
@@ -24,6 +25,8 @@ from .theme_manager import ThemeManager, show_saved_file_message
 __all__ = [
     "DeskCardWidget",
     "GridDesignerDialog",
+    "HiddenAdminDialog",
+    "MiniPresetSeatButton",
     "SeatingBoardView",
     "ShortcutManager",
     "ShortcutSettingsDialog",

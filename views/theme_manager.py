@@ -482,6 +482,33 @@ class ThemeManager:
                 color: #94A3B8;
                 border-top: 1px solid #1E293B;
             }}
+            QTabWidget::pane {{
+                border: 1px solid #334155;
+                border-radius: 6px;
+                background-color: #1E293B;
+                top: -1px;
+            }}
+            QTabBar::tab {{
+                background-color: #0F172A;
+                color: #94A3B8;
+                border: 1px solid #334155;
+                border-bottom: none;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                padding: 8px 16px;
+                margin-right: 2px;
+                font-weight: 600;
+                font-size: 12px;
+            }}
+            QTabBar::tab:selected {{
+                background-color: #2563EB;
+                color: #FFFFFF;
+                border-color: #3B82F6;
+            }}
+            QTabBar::tab:hover:!selected {{
+                background-color: #1E293B;
+                color: #F8FAFC;
+            }}
             QToolTip {{
                 background-color: #1E293B;
                 color: #F8FAFC;
@@ -726,6 +753,33 @@ class ThemeManager:
                 background-color: #F8FAFC;
                 color: #475569;
                 border-top: 1px solid #E2E8F0;
+            }}
+            QTabWidget::pane {{
+                border: 1px solid #CBD5E1;
+                border-radius: 6px;
+                background-color: #FFFFFF;
+                top: -1px;
+            }}
+            QTabBar::tab {{
+                background-color: #E2E8F0;
+                color: #475569;
+                border: 1px solid #CBD5E1;
+                border-bottom: none;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                padding: 8px 16px;
+                margin-right: 2px;
+                font-weight: 600;
+                font-size: 12px;
+            }}
+            QTabBar::tab:selected {{
+                background-color: #2563EB;
+                color: #FFFFFF;
+                border-color: #1D4ED8;
+            }}
+            QTabBar::tab:hover:!selected {{
+                background-color: #F1F5F9;
+                color: #0F172A;
             }}
             QToolTip {{
                 background-color: #1E293B;

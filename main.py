@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -47,6 +48,7 @@ from services import (
     FileServiceError,
     SeatingService,
     SeatingValidationError,
+    SecretConfigService,
 )
 from views import (
     ACTION_CLEAR_ASSIGNMENT,
@@ -59,6 +61,7 @@ from views import (
     ACTION_SAVE_EXCEL,
     ACTION_SHORTCUT_SETTINGS,
     GridDesignerDialog,
+    HiddenAdminDialog,
     SeatingBoardView,
     ShortcutManager,
     ShortcutSettingsDialog,
@@ -174,7 +177,10 @@ class MainWindow(QMainWindow):
         self.grid.apply_preset(PresetType.PAIRS)
         self.roster: List[Student] = self._create_initial_sample_roster()
 
+        self.secret_service = SecretConfigService()
         self.shortcut_actions: dict[str, QAction] = {}
+        self.act_hidden_menu: Optional[QAction] = None
+        self.act_force_trigger: Optional[QAction] = None
 
         self._init_ui()
         self._init_shortcuts()
@@ -570,12 +576,22 @@ class MainWindow(QMainWindow):
             order_dir = OrderDirection.ROW_FIRST
 
         try:
+            force_preset_map = (
+                self.secret_service.get_preset_map()
+                if self.secret_service.is_force_next_assignment()
+                else None
+            )
+            forbidden_pairs = self.secret_service.get_forbidden_pairs()
+
             status_msg, notice = SeatingService.execute_placement(
                 self.grid,
                 self.roster,
                 mode=mode,
                 respect_locks=respect_locks,
                 order_direction=order_dir,
+                force_preset_map=force_preset_map,
+                forbidden_pairs=forbidden_pairs,
+                secret_service=self.secret_service,
             )
             self._last_status_msg = status_msg
             self._last_notice = notice
@@ -970,7 +986,19 @@ class MainWindow(QMainWindow):
             self.addAction(action)
             self.shortcut_actions[action_id] = action
 
+        # 교사용 비공개 히든 메뉴 및 1회성 강제 배치 단축키 (UI 메뉴/툴바에는 절대 노출하지 않음)
+        self.act_hidden_menu = QAction(self)
+        self.act_hidden_menu.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
+        self.act_hidden_menu.triggered.connect(self._on_trigger_hidden_menu)
+        self.addAction(self.act_hidden_menu)
+
+        self.act_force_trigger = QAction(self)
+        self.act_force_trigger.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
+        self.act_force_trigger.triggered.connect(self._on_trigger_force_assignment)
+        self.addAction(self.act_force_trigger)
+
         self._apply_shortcuts()
+        self._apply_secret_shortcuts()
 
     def _apply_shortcuts(self) -> None:
         """
@@ -1044,6 +1072,70 @@ class MainWindow(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._apply_shortcuts()
             self.statusBar().showMessage("단축키 설정이 성공적으로 저장 및 적용되었습니다.")
+
+    # ------------------------------------------------------------------
+    # 교사용 비공개 히든 관리자 메뉴 및 1회성 강제 배치 트리거 핸들러
+    # ------------------------------------------------------------------
+    def _apply_secret_shortcuts(self) -> None:
+        """SecretConfigService에서 비공개 단축키를 읽어 히든 QAction에 바인딩합니다."""
+        self.secret_service.load()
+        menu_seq = self.secret_service.get_menu_shortcut()
+        force_seq = self.secret_service.get_force_shortcut()
+
+        if self.act_hidden_menu is not None:
+            if menu_seq:
+                self.act_hidden_menu.setShortcut(QKeySequence(menu_seq))
+                self.act_hidden_menu.setEnabled(True)
+            else:
+                self.act_hidden_menu.setShortcut(QKeySequence())
+                self.act_hidden_menu.setEnabled(False)
+
+        if self.act_force_trigger is not None:
+            if force_seq:
+                self.act_force_trigger.setShortcut(QKeySequence(force_seq))
+                self.act_force_trigger.setEnabled(True)
+            else:
+                self.act_force_trigger.setShortcut(QKeySequence())
+                self.act_force_trigger.setEnabled(False)
+
+    def _on_trigger_hidden_menu(self) -> None:
+        """
+        히든 메뉴 단축키(기본 Ctrl+Shift+H) 입력 시 호출됩니다.
+        패스워드 입력 모드의 QInputDialog로 마스터 PIN을 검증한 뒤 HiddenAdminDialog를 엽니다.
+        """
+        if self._is_input_widget_focused() or self.seating_view.is_animating():
+            return
+
+        pin_input, ok = QInputDialog.getText(
+            self,
+            "관리자 인증",
+            "보안 PIN 번호를 입력하세요:",
+            QLineEdit.EchoMode.Password,
+        )
+        if not ok:
+            return
+
+        if not self.secret_service.verify_pin(pin_input):
+            QMessageBox.warning(self, "인증 실패", "보안 PIN 번호가 일치하지 않습니다.")
+            return
+
+        dlg = HiddenAdminDialog(
+            secret_service=self.secret_service,
+            grid=self.grid,
+            roster=self.roster,
+            parent=self,
+        )
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._apply_secret_shortcuts()
+
+    def _on_trigger_force_assignment(self) -> None:
+        """
+        1회성 강제 배치 단축키(기본 Ctrl+Shift+F) 입력 시 호출됩니다.
+        학생들이 눈치채지 못하도록 화면 팝업이나 상태 표시줄 변경 없이 내부 플래그만 무음 토글합니다.
+        """
+        if self._is_input_widget_focused():
+            return
+        self.secret_service.toggle_force_next_assignment()
 
 
 def main() -> None:

@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>교실 자리 배치 프로그램 사용자 설명서</title>
+  <style>
+    /* ==========================================================================
+       기본 스타일 및 CSS 변수 (외부 의존성 제로)
+       ========================================================================== */
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --accent: #059669;
+      --accent-light: #ecfdf5;
+      --secret: #7c3aed;
+      --secret-light: #f5f3ff;
+      --warning: #d97706;
+      --warning-light: #fffbeb;
+      --danger: #dc2626;
+      --danger-light: #fef2f2;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --text-sub: #64748b;
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --border-color: #e2e8f0;
+      --border-dark: #cbd5e1;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Pretendard', '맑은 고딕', 'Malgun Gothic', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.65;
+      color: var(--text-main);
+      background-color: var(--bg-page);
+      word-break: keep-all;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ==========================================================================
+       레이아웃 및 헤더
+       ========================================================================== */
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 30px 20px 80px;
+    }
+
+    header.doc-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+      color: #ffffff;
+      padding: 40px 32px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      margin-bottom: 24px;
+    }
+
+    header.doc-header .badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(4px);
+      color: #ffffff;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    header.doc-header h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+
+    header.doc-header p {
+      font-size: 1.05rem;
+      color: #e0e7ff;
+      max-width: 760px;
+    }
+
+    /* ==========================================================================
+       상단 바로가기 네비게이션 (Sticky Quick Nav)
+       ========================================================================== */
+    nav.quick-nav {
+      position: sticky;
+      top: 12px;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      border-radius: 9999px;
+      padding: 8px 16px;
+      box-shadow: var(--shadow-md);
+      margin-bottom: 36px;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    nav.quick-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      transition: all 0.2s ease;
+    }
+
+    nav.quick-nav a:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    nav.quick-nav a.secret-nav {
+      color: var(--secret);
+      background: var(--secret-light);
+    }
+
+    nav.quick-nav a.secret-nav:hover {
+      background: #ede9fe;
+    }
+
+    /* ==========================================================================
+       카드 및 섹션 스타일
+       ========================================================================== */
+    section.section-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 36px 32px;
+      margin-bottom: 32px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    section.section-card h2 {
+      font-size: 1.55rem;
+      font-weight: 800;
+      color: #1e293b;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--border-color);
+    }
+
+    section.section-card h3 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #334155;
+      margin: 28px 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    p {
+      margin-bottom: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ==========================================================================
+       단계별 단계 카드 (Step Cards)
+       ========================================================================== */
+    .steps-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 18px;
+      margin: 20px 0;
+    }
+
+    .step-card {
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 22px;
+      position: relative;
+    }
+
+    .step-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--primary);
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 0.85rem;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      margin-bottom: 10px;
+    }
+
+    .step-card h4 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+
+    .step-card p {
+      font-size: 0.92rem;
+      color: var(--text-sub);
+      margin-bottom: 0;
+    }
+
+    /* ==========================================================================
+       특징 그리드 (Feature Grid)
+       ========================================================================== */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      margin: 16px 0;
+    }
+
+    .feature-item {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .feature-item:hover {
+      border-color: #94a3b8;
+      box-shadow: var(--shadow-md);
+    }
+
+    .feature-item h4 {
+      font-size: 1.02rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 6px;
+    }
+
+    .feature-item p {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      margin-bottom: 0;
+    }
+
+    /* ==========================================================================
+       키캡 스타일 (<kbd>)
+       ========================================================================== */
+    kbd {
+      display: inline-block;
+      padding: 2px 7px;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 700;
+      line-height: 1.3;
+      color: #334155;
+      background-color: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      box-shadow: 0 2px 0 0 #94a3b8, 0 2px 2px 0 rgba(0, 0, 0, 0.1);
+      margin: 0 3px;
+      vertical-align: baseline;
+    }
+
+    /* ==========================================================================
+       콜아웃 박스 (Callout Boxes)
+       ========================================================================== */
+    .callout {
+      border-left: 4px solid;
+      padding: 16px 20px;
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      margin: 20px 0;
+      font-size: 0.95rem;
+    }
+
+    .callout-title {
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .callout.tip {
+      background-color: var(--primary-light);
+      border-color: var(--primary);
+      color: #1e3a8a;
+    }
+    .callout.tip .callout-title { color: var(--primary); }
+
+    .callout.warning {
+      background-color: var(--warning-light);
+      border-color: var(--warning);
+      color: #78350f;
+    }
+    .callout.warning .callout-title { color: #b45309; }
+
+    .callout.secret {
+      background-color: var(--secret-light);
+      border-color: var(--secret);
+      color: #4c1d95;
+    }
+    .callout.secret .callout-title { color: var(--secret); }
+
+    /* ==========================================================================
+       표 스타일 (Table)
+       ========================================================================== */
+    .table-wrapper {
+      overflow-x: auto;
+      margin: 18px 0;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.94rem;
+    }
+
+    th {
+      background-color: #f1f5f9;
+      color: #334155;
+      font-weight: 700;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      color: #1e293b;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:nth-child(even) td {
+      background-color: #fafbfc;
+    }
+
+    /* ==========================================================================
+       교사용 히든 메뉴 아코디언 (<details>)
+       ========================================================================== */
+    details.secret-details {
+      background: #faf5ff;
+      border: 2px solid #c084fc;
+      border-radius: var(--radius-md);
+      margin: 20px 0;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+
+    details.secret-details summary {
+      background: #f3e8ff;
+      padding: 16px 20px;
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #581c87;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+      transition: background 0.2s;
+    }
+
+    details.secret-details summary::-webkit-details-marker {
+      display: none;
+    }
+
+    details.secret-details summary::after {
+      content: '펼치기 ▼';
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #7e22ce;
+    }
+
+    details.secret-details[open] summary::after {
+      content: '접기 ▲';
+    }
+
+    details.secret-details summary:hover {
+      background: #e9d5ff;
+    }
+
+    .secret-content {
+      padding: 24px 20px;
+      border-top: 1px solid #e9d5ff;
+      background: #ffffff;
+    }
+
+    /* ==========================================================================
+       푸터
+       ========================================================================== */
+    footer.doc-footer {
+      text-align: center;
+      padding: 40px 20px 20px;
+      color: var(--text-sub);
+      font-size: 0.9rem;
+      border-top: 1px solid var(--border-color);
+    }
+
+    /* ==========================================================================
+       인쇄 스타일 (@media print)
+       ========================================================================== */
+    @media print {
+      body {
+        background-color: #ffffff;
+        color: #000000;
+      }
+      .container {
+        max-width: 100%;
+        padding: 0;
+      }
+      nav.quick-nav {
+        display: none !important;
+      }
+      header.doc-header {
+        background: none;
+        color: #000000;
+        border: 2px solid #000000;
+        padding: 20px;
+        box-shadow: none;
+      }
+      header.doc-header p, header.doc-header .badge {
+        color: #333333;
+      }
+      section.section-card {
+        border: 1px solid #cccccc;
+        box-shadow: none;
+        page-break-inside: avoid;
+        margin-bottom: 20px;
+        padding: 20px;
+      }
+      details.secret-details {
+        border: 1px solid #7c3aed;
+      }
+      details.secret-details[open] .secret-content {
+        display: block;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- 상단 메인 헤더 -->
+    <header class="doc-header">
+      <span class="badge">교사용 데스크톱 프로그램 안내</span>
+      <h1>교실 자리 배치 프로그램 사용자 설명서</h1>
+      <p>단 3번의 클릭으로 완성되는 공정하고 즐거운 교실 자리 배치! 긴장감 넘치는 슬롯머신 룰렛 추첨, 고정석/짝꿍 배치, 다양한 문서 인쇄 및 비공개 관리 기능까지 완벽하게 지원합니다.</p>
+    </header>
+
+    <!-- 빠른 탐색 바 (Quick Nav) -->
+    <nav class="quick-nav">
+      <a href="#quick-start">🚀 빠른 시작</a>
+      <a href="#placement-modes">🎲 배치 방식 (5종)</a>
+      <a href="#shuffle-effect">🎬 슬롯머신 연출</a>
+      <a href="#seat-controls">📌 고정석 & 수동 조작</a>
+      <a href="#export-save">📤 내보내기 & 저장</a>
+      <a href="#hidden-admin" class="secret-nav">🔒 교사용 히든 메뉴</a>
+      <a href="#shortcuts-table">⌨ 단축키 모음</a>
+    </nav>
+
+    <!-- [1] 빠른 시작 가이드 -->
+    <section id="quick-start" class="section-card">
+      <h2><span>🚀</span> 1. 빠른 시작 가이드 (Quick Start)</h2>
+      <p>프로그램 실행 파일(<code>.exe</code>)을 더블 클릭하면 별도의 복잡한 설치 과정 없이 즉시 실행됩니다.</p>
+      
+      <div class="steps-container">
+        <div class="step-card">
+          <span class="step-badge">1</span>
+          <h4>명단 준비</h4>
+          <p>상단 <strong>[⚙ 설정] ➔ [👥 학생 명단 관리]</strong>에서 학생 정보를 직접 입력하거나, 나이스(NEIS) 또는 엑셀 출석부 명단을 복사·붙여넣기하여 등록합니다.</p>
+        </div>
+
+        <div class="step-card">
+          <span class="step-badge">2</span>
+          <h4>책상 레이아웃 설정</h4>
+          <p>상단 <strong>[⚙ 설정] ➔ [📐 책상 레이아웃 설정]</strong>에서 교실 행×열 크기 및 배치 형태(짝꿍형, 시험 대형, 모둠형 등)를 원클릭으로 선택합니다.</p>
+        </div>
+
+        <div class="step-card">
+          <span class="step-badge">3</span>
+          <h4>배치 실행</h4>
+          <p>상단 툴바에서 원하는 <strong>배치 방식</strong>을 고른 뒤, 파란색 <strong>[🎲 배치 실행]</strong> 버튼(<kbd>F5</kbd>)을 누르면 배치가 즉시 시작됩니다.</p>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <div class="callout-title">💡 꿀팁: 첫 실행 시 샘플 명단 제공</div>
+        프로그램을 처음 실행하면 20명의 예시 학생 명단과 5행×8열 짝꿍형 책상이 기본 세팅되어 있어 곧바로 테스트 배치를 해볼 수 있습니다!
+      </div>
+    </section>
+
+    <!-- [2] 핵심 기능 상세 안내 -->
+    <section id="placement-modes" class="section-card">
+      <h2><span>🎲</span> 2. 5가지 맞춤형 자리 배치 방식</h2>
+      <p>학급 상황과 교육 활동 목적에 맞추어 드롭다운 메뉴에서 최적의 알고리즘을 선택할 수 있습니다.</p>
+
+      <div class="feature-grid">
+        <div class="feature-item">
+          <h4>1. 기본 무작위 배치</h4>
+          <p>모든 학생을 완전 무작위로 추첨하여 활성 책상에 공정하게 배치합니다.</p>
+        </div>
+        <div class="feature-item">
+          <h4>2. 남녀 이성 짝꿍 배치</h4>
+          <p>2열 짝꿍 책상 구조를 자동 분석하여 남학생과 여학생이 1조를 이루도록 우선 매칭합니다.</p>
+        </div>
+        <div class="feature-item">
+          <h4>3. 동성 짝꿍 배치</h4>
+          <p>남-남 또는 여-여 학생이 짝꿍 좌석에 나란히 앉도록 배치합니다.</p>
+        </div>
+        <div class="feature-item">
+          <h4>4. 번호순 자동 배치</h4>
+          <p>출석번호 순서대로 정렬 배치합니다. <strong>가로 우선(행 순서)</strong> 또는 <strong>세로 우선(열 순서)</strong>을 선택할 수 있습니다.</p>
+        </div>
+        <div class="feature-item">
+          <h4>5. 앞뒤 구역 교차 배치</h4>
+          <p>기존에 앞줄에 앉았던 학생은 뒷줄로, 뒷줄에 앉았던 학생은 앞줄로 공평하게 위치를 교차 이동시킵니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="shuffle-effect" class="section-card">
+      <h2><span>🎬</span> 3. 긴장감 넘치는 슬롯머신 연출</h2>
+      <p>단순한 결과 표시를 넘어, 교실 TV 화면에 띄워두고 학생들과 함께 두근거리는 마음으로 자리를 열람할 수 있습니다.</p>
+
+      <h3>속도 조절 및 모드</h3>
+      <ul>
+        <li><strong>⚡ 빠르게:</strong> 자리당 0.3초 간격으로 신속하게 공개됩니다.</li>
+        <li><strong>⏱ 보통 (기본값):</strong> 자리당 0.5초 간격으로 리드미컬하게 공개됩니다.</li>
+        <li><strong>🐢 느리게:</strong> 자리당 1.0초 간격으로 극대화된 긴장감을 연출합니다.</li>
+        <li><strong>🖐 수동 오픈 모드:</strong> 전체 셔플 롤링 후 멈춰있는 상태에서 교사나 학생이 직접 좌석을 오픈합니다.
+          <ul style="margin-left: 20px; margin-top: 6px;">
+            <li><kbd>Space</kbd> 또는 <kbd>Enter</kbd> 키를 누르면 다음 자리가 1개씩 순서대로 확정 공개됩니다.</li>
+            <li>마우스로 특정 책상 카드를 <strong>직접 클릭</strong>하여 원하는 자리부터 깜짝 공개할 수도 있습니다.</li>
+          </ul>
+        </li>
+      </ul>
+
+      <div class="callout tip">
+        <div class="callout-title">💡 연출 스킵 및 연출 Off 옵션</div>
+        애니메이션 재생 도중 <kbd>ESC</kbd> 키를 누르면 즉시 전체 자리가 완성 상태로 공개됩니다. 빠른 배치를 원하시면 상단 <strong>[🎬 슬롯머신 연출]</strong> 체크박스를 해제하세요.
+      </div>
+    </section>
+
+    <section id="seat-controls" class="section-card">
+      <h2><span>📌</span> 4. 고정석(Pin) 설정 및 대화형 수동 조작</h2>
+      
+      <div class="feature-grid">
+        <div class="feature-item">
+          <h4>📌 좌석 고정(Pin/Lock)</h4>
+          <p>시력 보호, 다리 부상, 수업 집중 등의 사유로 자리를 유지해야 하는 학생은 책상 우측 상단의 <strong>[📌]</strong> 아이콘을 눌러 고정합니다. 다음 배치 시 고정석 학생은 그 자리에 남고 나머지 학생들만 재배치됩니다.</p>
+        </div>
+
+        <div class="feature-item">
+          <h4>🔄 드래그 앤 드롭 & 클릭 맞바꾸기</h4>
+          <p>배치 완료 후 미세 조정이 필요할 때, 책상 카드를 마우스로 <strong>드래그 앤 드롭</strong>하거나 두 책상을 <strong>순서대로 클릭</strong>하면 두 학생의 자리가 즉시 맞바뀝니다.</p>
+        </div>
+
+        <div class="feature-item">
+          <h4>👤 우클릭 빠른 메뉴 (사전 배정)</h4>
+          <p>책상 카드를 마우스 우클릭하면 특정 학생을 해당 자리에 직접 지정(Pre-set)하거나, 해당 좌석만 비우기(Clear)할 수 있습니다.</p>
+        </div>
+
+        <div class="feature-item">
+          <h4>🧹 배정 초기화</h4>
+          <p><strong>[🧹 배정 초기화]</strong>(<kbd>Ctrl + Backspace</kbd>) 클릭 시, 고정석(📌) 학생은 유지할지 여부를 묻는 스마트 팝업이 제공됩니다.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="export-save" class="section-card">
+      <h2><span>📤</span> 5. 인쇄·게시용 문서 내보내기 & 엑셀 복원 저장</h2>
+      
+      <h3>게시용 vs 교사용 180도 회전 시점 지원</h3>
+      <p>상단 <strong>[📤 인쇄·게시용 내보내기 ▼]</strong> 버튼을 통해 학급 상황에 맞는 2가지 시점 문서를 출력할 수 있습니다.</p>
+      <ul>
+        <li><strong>📋 게시용 (학생 시점):</strong> 교실 앞쪽 칠판/교탁이 문서 상단에 위치하여 교실 뒤쪽 게시판 부착 및 학생 열람에 최적화되어 있습니다.</li>
+        <li><strong>👩‍🏫 교사용 (180도 회전 시점):</strong> 교탁이 문서 하단에 위치하며, 교탁 앞에 선 선생님 시점에서 교실을 내려다보는 방향(좌우·앞뒤 반전)으로 인쇄됩니다. 출석 확인 및 수업 지도시 매우 편리합니다.</li>
+      </ul>
+
+      <h3>지원 파일 포맷</h3>
+      <p>엑셀 파일(<code>.xlsx</code>), 인쇄용 웹 문서(<code>.html</code>), PDF 문서(<code>.pdf</code>), 한컴오피스 한글 문서(<code>.hwp</code>)를 지원합니다.</p>
+
+      <div class="callout tip">
+        <div class="callout-title">💡 엑셀 완전 복원 저장/불러오기 기능</div>
+        <strong>[📁 파일] ➔ [💾 배치 엑셀 저장]</strong>을 실행하면, 현재 배치 상태뿐만 아니라 레이아웃 구조, 학생 명단, 고정석 여부까지 안전하게 보존됩니다. 언제든지 <strong>[📂 배치 엑셀 불러오기]</strong>로 이전 배치를 100% 동일하게 복원할 수 있습니다.
+      </div>
+    </section>
+
+    <!-- [3] 🔒 교사용 비공개 히든 메뉴 (Hidden Admin Guide) -->
+    <section id="hidden-admin" class="section-card" style="border: 2px solid var(--secret);">
+      <h2><span>🔒</span> 6. 교사용 비공개 히든 메뉴 (Hidden Admin)</h2>
+      <p>학생들에게는 화면상으로 일체 노출되지 않으며, 오직 담임 교사만이 단축키와 보안 PIN 번호를 통해 진입하여 제어할 수 있는 특수 관리 기능입니다.</p>
+
+      <details class="secret-details" open>
+        <summary>🔒 교사용 비공개 관리 기능 가이드 (클릭하여 열기/접기)</summary>
+        <div class="secret-content">
+          
+          <div class="callout secret">
+            <div class="callout-title">🔑 히든 메뉴 진입 및 보안 인증</div>
+            프로그램 실행 화면에서 단축키 <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>H</kbd>를 누르면 보안 PIN 입력 대화상자가 나타납니다.<br>
+            초기 마스터 PIN은 <strong><code>0000</code></strong>이며, 히든 창 내부의 <strong>[탭 1: 단축키 & 보안 설정]</strong>에서 원하는 4자리 번호 및 단축키로 변경할 수 있습니다.
+          </div>
+
+          <h3 style="color: var(--secret); margin-top: 16px;">🎯 기능 1: 다음 1회 강제 배치 프리셋</h3>
+          <p>특정 학생을 원하는 좌석에 미리 내정해 두고, 다음 추첨 시 자연스럽게 그 자리에 배치되도록 합니다. <strong>화면상에 고정 핀(📌) 표시가 전혀 붙지 않아 학생들은 조작 여부를 전혀 눈치챌 수 없습니다.</strong></p>
+          <ul>
+            <li><strong>📥 현재 자리 배치 불러오기:</strong> 메인 화면에서 마음에 드는 배치를 완성한 후 원클릭으로 프리셋 미니 그리드에 그대로 복사할 수 있습니다.</li>
+            <li><strong>미니 그리드 내 드래그 앤 드롭:</strong> 프리셋 창 안에서도 좌석 카드를 마우스로 드래그하여 학생 이동 및 자리 맞바꾸기가 가능합니다.</li>
+            <li><strong>단축키 무음 트리거 (<kbd>Ctrl + Shift + F</kbd>):</strong> 화면에 어떠한 팝업이나 표시줄 변경도 없이 '1회 강제 적용'을 켜거나 끌 수 있습니다. 1회 배치가 완료되면 플래그는 자동으로 <code>Off</code>로 리셋되어 단발성 배치가 보장됩니다.</li>
+          </ul>
+
+          <h3 style="color: var(--secret); margin-top: 24px;">🚫 기능 2: 근거리(1칸 이내) 배치 제외 설정</h3>
+          <p>사이가 좋지 않거나 분리가 필요한 두 학생을 등록해 두면, 자리 배치 시 <strong>상하·좌우·대각선 8방향 1칸 이내(체비쇼프 거리 ≤ 1)</strong>에 인접하지 않도록 알고리즘이 자동으로 격리 배치합니다.</p>
+          <ul>
+            <li>무작위 추첨 후 두 학생이 1칸 이내로 붙으면 최대 1,000회 자동 재추첨을 시도합니다.</li>
+            <li>만약 끝까지 해결되지 않을 경우, 제약 조건에 걸리지 않는 다른 학생과의 <strong>1:1 자동 맞바꾸기(Local Swap)</strong>를 통해 확실하게 분리합니다.</li>
+          </ul>
+
+        </div>
+      </details>
+    </section>
+
+    <!-- [4] 단축키 모음 요약표 -->
+    <section id="shortcuts-table" class="section-card">
+      <h2><span>⌨</span> 7. 단축키 모음 요약표</h2>
+      <p>모든 기본 단축키는 상단 메뉴 <strong>[⚙ 설정] ➔ [⌨ 단축키 설정]</strong>(<kbd>Ctrl + K</kbd>)에서 선생님이 사용하기 편한 키로 자유롭게 변경할 수 있습니다.</p>
+
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 28%;">기능 구분</th>
+              <th style="width: 28%;">기본 단축키</th>
+              <th style="width: 44%;">기능 설명</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>자리 배치 실행</strong></td>
+              <td><kbd>F5</kbd></td>
+              <td>선택된 배치 방식과 옵션으로 자리 배치를 시작합니다.</td>
+            </tr>
+            <tr>
+              <td><strong>학생 명단 관리</strong></td>
+              <td><kbd>Ctrl</kbd> + <kbd>R</kbd></td>
+              <td>학생 명단 관리 대화상자를 엽니다.</td>
+            </tr>
+            <tr>
+              <td><strong>책상 레이아웃 설정</strong></td>
+              <td><kbd>Ctrl</kbd> + <kbd>L</kbd></td>
+              <td>N×M 격자 크기 및 짝꿍/시험대형 레이아웃 디자이너를 엽니다.</td>
+            </tr>
+            <tr>
+              <td><strong>배정 초기화</strong></td>
+              <td><kbd>Ctrl</kbd> + <kbd>Backspace</kbd></td>
+              <td>좌석에 배정된 학생들을 비웁니다 (고정석 유지 옵션 지원).</td>
+            </tr>
+            <tr>
+              <td><strong>인쇄/게시 문서 내보내기</strong></td>
+              <td><kbd>Ctrl</kbd> + <kbd>E</kbd></td>
+              <td>게시용/교사용 문서(Excel, PDF, HTML, HWP) 내보내기 메뉴를 엽니다.</td>
+            </tr>
+            <tr>
+              <td><strong>인쇄 / PDF 즉시 저장</strong></td>
+              <td><kbd>Ctrl</kbd> + <kbd>P</kbd></td>
+              <td>게시용 PDF 문서를 즉시 내보냅니다.</td>
+            </tr>
+            <tr>
+              <td><strong>배치 엑셀 저장</strong></td>
+              <td><kbd>Ctrl</kbd> + <kbd>S</kbd></td>
+              <td>현재 배치 상태 및 명단을 복원 가능한 엑셀 파일로 저장합니다.</td>
+            </tr>
+            <tr>
+              <td><strong>배치 엑셀 불러오기</strong></td>
+              <td><kbd>Ctrl</kbd> + <kbd>O</kbd></td>
+              <td>이전에 저장한 엑셀 파일로부터 배치를 100% 동일하게 복원합니다.</td>
+            </tr>
+            <tr>
+              <td><strong>단축키 설정</strong></td>
+              <td><kbd>Ctrl</kbd> + <kbd>K</kbd></td>
+              <td>단축키 확인 및 변경 대화상자를 엽니다.</td>
+            </tr>
+            <tr style="background-color: #faf5ff;">
+              <td><strong style="color: var(--secret);">🔒 히든 관리자 메뉴</strong></td>
+              <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>H</kbd></td>
+              <td>보안 PIN 인증 후 교사용 비공개 설정 대화상자를 엽니다.</td>
+            </tr>
+            <tr style="background-color: #faf5ff;">
+              <td><strong style="color: var(--secret);">🔒 강제 배치 무음 트리거</strong></td>
+              <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd></td>
+              <td>화면 노출 없이 다음 1회 강제 배치 적용 여부를 조용히 토글합니다.</td>
+            </tr>
+            <tr>
+              <td><strong>슬롯머신 연출 스킵</strong></td>
+              <td><kbd>ESC</kbd></td>
+              <td>진행 중인 룰렛 애니메이션을 즉시 건너뛰고 최종 결과를 표시합니다.</td>
+            </tr>
+            <tr>
+              <td><strong>수동 1자리 오픈</strong></td>
+              <td><kbd>Space</kbd> / <kbd>Enter</kbd></td>
+              <td>수동 오픈 모드에서 다음 좌석을 한 자리씩 확정 공개합니다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 문서 푸터 -->
+    <footer class="doc-footer">
+      <p>교실 자리 배치 데스크톱 프로그램 (Classroom Seating Arrangement Desktop App)</p>
+      <p style="margin-top: 4px; font-size: 0.85rem;">Designed for Teachers &amp; Happy Classrooms &copy; 2026</p>
+    </footer>
+
+  </div>
+
+</body>
+</html>

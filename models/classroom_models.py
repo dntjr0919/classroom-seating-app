@@ -22,9 +22,9 @@ class Gender(str, Enum):
         if not value:
             return cls.NONE
         cleaned = str(value).strip().upper()
-        if cleaned in ("M", "남", "남자", "남학생", "MALE", "BOY"):
+        if cleaned in ("M", "남", "남성", "남자", "남학생", "MALE", "BOY"):
             return cls.MALE
-        if cleaned in ("F", "여", "여자", "여학생", "FEMALE", "GIRL"):
+        if cleaned in ("F", "여", "여성", "여자", "여학생", "FEMALE", "GIRL"):
             return cls.FEMALE
         return cls.NONE
 
